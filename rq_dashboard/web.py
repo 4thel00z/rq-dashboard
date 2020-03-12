@@ -56,12 +56,12 @@ env = Environment(
 PREFIX = "/rq"
 
 
-def setup(current_app: sanic.Sanic, prefix=PREFIX):
+def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashboard"):
     while prefix.endswith("/"):
         prefix = prefix.rstrip("/")
 
     blueprint = Blueprint(
-        "rq_dashboard", prefix,
+        blueprint_namespace, prefix,
     )
 
     blueprint.static("/static", os.path.join(CUR_DIR, "static"))
@@ -112,7 +112,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
                 name=q.name,
                 count=q.count,
                 queued_url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="queued",
@@ -121,7 +121,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
                 ),
                 failed_job_registry_count=FailedJobRegistry(q.name).count,
                 failed_url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="failed",
@@ -130,7 +130,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
                 ),
                 started_job_registry_count=StartedJobRegistry(q.name).count,
                 started_url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="started",
@@ -139,7 +139,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
                 ),
                 deferred_job_registry_count=DeferredJobRegistry(q.name).count,
                 deferred_url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="deferred",
@@ -148,7 +148,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
                 ),
                 finished_job_registry_count=FinishedJobRegistry(q.name).count,
                 finished_url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="finished",
@@ -269,10 +269,43 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         return r
 
     @blueprint.route(
-        "/<instance_number:int>/view/jobs",
+        "/<instance_number:int>/view/jobs"
     )
+    async def jobs_overview_(request, instance_number):
+        queue_name = None
+        registry_name = "queued"
+        per_page = 8
+        page = 1
+        if queue_name is None:
+            queue = Queue()
+        else:
+            queue = Queue(queue_name)
+        r = make_response(
+            render_template(
+                "rq_dashboard/jobs.html",
+                current_instance=instance_number,
+                instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
+                queues=Queue.all(),
+                queue=queue,
+                per_page=per_page,
+                page=page,
+                registry_name=registry_name,
+                rq_dashboard_version=rq_dashboard_version,
+                rq_version=rq_version,
+                active_tab="jobs",
+                deprecation_options_usage=current_app.config.get(
+                    "DEPRECATED_OPTIONS", False
+                ),
+                headers={
+                    "Cache-Control": "no-store"
+                }
+            )
+        )
+        return r
+
     @blueprint.route(
-        "/<instance_number:int>/view/jobs/<queue_name:str>/<registry_name:str>/<per_page:int>/<page:int>"
+        "/<instance_number:int>/view/jobs/<queue_name>/<registry_name>/<per_page:int>/<page:int>",
+        name="jobs_overview"
     )
     async def jobs_overview(request, instance_number, queue_name=None, registry_name="queued", per_page=8, page=1):
         if queue_name is None:
@@ -324,18 +357,18 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         return r
 
     @blueprint.route("/job/<job_id:int>/delete", methods=["POST"])
-    def delete_job_view(request, job_id):
+    async def delete_job_view(request, job_id):
         job = Job.fetch(job_id)
         job.delete()
         return json(dict(status="OK"))
 
     @blueprint.route("/job/<job_id>/requeue", methods=["POST"])
-    def requeue_job_view(request, job_id):
+    async def requeue_job_view(request, job_id):
         requeue_job(job_id, connection=current_app.redis_conn)
         return json(dict(status="OK"))
 
     @blueprint.route("/requeue/<queue_name>", methods=["GET", "POST"])
-    def requeue_all(request, queue_name):
+    async def requeue_all(request, queue_name):
         fq = Queue(queue_name).failed_job_registry
         job_ids = fq.get_job_ids()
         count = len(job_ids)
@@ -344,7 +377,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         return json(dict(status="OK", count=count))
 
     @blueprint.route("/queue/<queue_name>/<registry_name>/empty", methods=["POST"])
-    def empty_queue(request, queue_name, registry_name):
+    async def empty_queue(request, queue_name, registry_name):
         if registry_name == "queued":
             q = Queue(queue_name)
             q.empty()
@@ -367,20 +400,20 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         return json(dict(status="OK"))
 
     @blueprint.route("/queue/<queue_name>/compact", methods=["POST"])
-    def compact_queue(request, queue_name):
+    async def compact_queue(request, queue_name):
         q = Queue(queue_name)
         q.compact()
         return json(dict(status="OK"))
 
     @blueprint.route("/<instance_number:int>/data/queues.json")
-    def list_queues(request, instance_number):
+    async def list_queues(request, instance_number):
         queues = serialize_queues(instance_number, sorted(Queue.all()))
         return json(dict(queues=queues))
 
     @blueprint.route(
         "/<instance_number:int>/data/jobs/<queue_name>/<registry_name>/<per_page:int>/<page:int>.json"
     )
-    def list_jobs(request, instance_number, queue_name, registry_name, per_page, page):
+    async def list_jobs(request, instance_number, queue_name, registry_name, per_page, page):
         current_page = int(page)
         per_page = int(per_page)
         offset = (current_page - 1) * per_page
@@ -393,7 +426,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
             dict(
                 number=p,
                 url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=queue_name,
                     registry_name=registry_name,
@@ -409,7 +442,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         if current_page > 1:
             prev_page = dict(
                 url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=queue_name,
                     registry_name=registry_name,
@@ -422,7 +455,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         if current_page < last_page:
             next_page = dict(
                 url=current_app.url_for(
-                    "jobs_overview",
+                    ".".join((blueprint_namespace, "jobs_overview")),
                     instance_number=instance_number,
                     queue_name=queue_name,
                     registry_name=registry_name,
@@ -433,7 +466,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
 
         first_page_link = dict(
             url=current_app.url_for(
-                "jobs_overview",
+                ".".join((blueprint_namespace, "jobs_overview")),
                 instance_number=instance_number,
                 queue_name=queue_name,
                 registry_name=registry_name,
@@ -443,7 +476,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         )
         last_page_link = dict(
             url=current_app.url_for(
-                "jobs_overview",
+                ".".join((blueprint_namespace, "jobs_overview")),
                 instance_number=instance_number,
                 queue_name=queue_name,
                 registry_name=registry_name,
@@ -471,7 +504,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         )
 
     @blueprint.route("/<instance_number:int>/data/job/<job_id>.json")
-    def job_info(request, instance_number, job_id):
+    async def job_info(request, instance_number, job_id):
         job = Job.fetch(job_id)
         return json(dict(
             id=job.id,
@@ -486,7 +519,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX):
         ))
 
     @blueprint.route("/<instance_number:int>/data/workers.json")
-    def list_workers(request, instance_number):
+    async def list_workers(request, instance_number):
         def serialize_queue_names(worker):
             return [q.name for q in worker.queues]
 
