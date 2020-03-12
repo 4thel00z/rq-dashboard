@@ -489,3 +489,5 @@ def setup(current_app: sanic.Sanic):
         return json(dict(workers=workers))
 
     setup_rq_connection()
+    
+    return blueprint
