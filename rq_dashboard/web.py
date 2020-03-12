@@ -22,7 +22,7 @@ import arrow
 import jinja2
 import sanic
 import sanic.request
-from jinja2 import Environment, PackageLoader
+from jinja2 import Environment, FileSystemLoader
 from redis_sentinel_url import connect as from_url
 from rq import (
     VERSION as rq_version,
@@ -46,7 +46,7 @@ from six import string_types
 from .legacy_config import upgrade_config
 from .version import VERSION as rq_dashboard_version
 
-env = Environment(loader=PackageLoader('templates', 'static'),
+env = Environment(loader=FileSystemLoader('./templates', './static'),
                   autoescape=jinja2.select_autoescape(['html', 'xml', 'tpl']))
 
 blueprint = Blueprint(
@@ -489,5 +489,5 @@ def setup(current_app: sanic.Sanic):
         return json(dict(workers=workers))
 
     setup_rq_connection()
-    
+
     return blueprint
