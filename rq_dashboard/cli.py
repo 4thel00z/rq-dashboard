@@ -2,40 +2,28 @@ import importlib
 import logging
 import os
 import sys
-from urllib.parse import quote as urlquote, urlunparse
 
 import click
-from flask import Flask, Response, request
+import sanic
+import sanic.log
+import sanic.request
 
-from . import default_settings
 from .version import VERSION
-from .web import blueprint
+from .web import setup, PREFIX
 
 
-def add_basic_auth(blueprint, username, password, realm="RQ Dashboard"):
-    """Add HTTP Basic Auth to a blueprint.
+def make_sanic_app(config,
+                   username,
+                   password,
+                   prefix=PREFIX,
+                   blueprint_namespace="rq_dashboard",
+                   redis_url='redis://127.0.0.1:6379'):
+    """Return Sanic app with default configuration and registered blueprint."""
+    app = sanic.Sanic(__name__)
 
-    Note this is only for casual use!
-
-    """
-
-    @blueprint.before_request
-    def basic_http_auth(*args, **kwargs):
-        auth = request.authorization
-        if auth is None or auth.password != password or auth.username != username:
-            return Response(
-                "Please login",
-                401,
-                {"WWW-Authenticate": 'Basic realm="{}"'.format(realm)},
-            )
-
-
-def make_flask_app(config, username, password, url_prefix, compatibility_mode=True):
-    """Return Flask app with default configuration and registered blueprint."""
-    app = Flask(__name__)
-
-    # Start configuration with our built in defaults.
-    app.config.from_object(default_settings)
+    # Used in testing
+    if redis_url:
+        app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://127.0.0.1:6379'
 
     # Override with any settings in config file, if given.
     if config:
@@ -46,10 +34,8 @@ def make_flask_app(config, username, password, url_prefix, compatibility_mode=Tr
         app.config.from_envvar("RQ_DASHBOARD_SETTINGS")
 
     # Optionally add basic auth to blueprint and register with app.
-    if username:
-        add_basic_auth(blueprint, username, password)
-    app.register_blueprint(blueprint, url_prefix=url_prefix)
-
+    blueprint = setup(app, prefix, blueprint_namespace, username, password)
+    app.blueprint(blueprint)
     return app
 
 
@@ -77,52 +63,11 @@ def make_flask_app(config, username, password, url_prefix, compatibility_mode=Tr
     help="Configuration file (Python module on search path)",
 )
 @click.option(
-    "-H",
-    "--redis-host",
-    default=None,
-    hidden=True,
-    help="[DEPRECATED] IP address or hostname of Redis server. Use --redis-url instead",
-)
-@click.option(
-    "-P",
-    "--redis-port",
-    default=None,
-    type=int,
-    hidden=True,
-    help="[DEPRECATED] Port of Redis server. Use --redis-url instead",
-)
-@click.option(
-    "--redis-password",
-    default=None,
-    hidden=True,
-    help="[DEPRECATED] Password for Redis server. Use --redis-url instead",
-)
-@click.option(
-    "-D",
-    "--redis-database",
-    default=None,
-    type=int,
-    hidden=True,
-    help="[DEPRECATED] Database of Redis server, Use --redis-url instead",
-)
-@click.option(
     "-u",
     "--redis-url",
     default=None,
     multiple=True,
     help="Redis URL. Can be specified multiple times. Default: redis://127.0.0.1:6379",
-)
-@click.option(
-    "--redis-sentinels",
-    default=None,
-    hidden=True,
-    help="[DEPRECATED] List of redis sentinels. Use --redis-url instead",
-)
-@click.option(
-    "--redis-master-name",
-    default=None,
-    hidden=True,
-    help="[DEPRECATED] Name of redis master. Only needed when using sentinels. Use --redis-url instead",
 )
 @click.option(
     "--poll-interval",
@@ -138,44 +83,24 @@ def make_flask_app(config, username, password, url_prefix, compatibility_mode=Tr
     multiple=True,
     help="Append specified directories to sys.path",
 )
-@click.option(
-    "--web-background",
-    default=None,
-    hidden=True,
-    help="[DEPRECATED] Background of the web interface",
-)
-@click.option(
-    "--delete-jobs",
-    default=None,
-    hidden=True,
-    help="[DEPRECATED] Delete jobs instead of cancel",
-)
 @click.option("--debug/--normal", default=False, help="Enter DEBUG mode")
 @click.option(
     "-v", "--verbose", is_flag=True, default=False, help="Enable verbose logging"
 )
 def run(
-    bind,
-    port,
-    url_prefix,
-    username,
-    password,
-    config,
-    redis_host,
-    redis_port,
-    redis_password,
-    redis_database,
-    redis_url,
-    redis_sentinels,
-    redis_master_name,
-    poll_interval,
-    extra_path,
-    web_background,
-    debug,
-    delete_jobs,
-    verbose,
+        bind,
+        port,
+        url_prefix,
+        username,
+        password,
+        config,
+        redis_url,
+        poll_interval,
+        extra_path,
+        debug,
+        verbose,
 ):
-    """Run the RQ Dashboard Flask server.
+    """Run the RQ Dashboard Sanic server.
 
     All configuration can be set on the command line or through environment
     variables of the form RQ_DASHBOARD_*. For example RQ_DASHBOARD_USERNAME.
@@ -190,63 +115,23 @@ def run(
         sys.path += list(extra_path)
 
     click.echo("RQ Dashboard version {}".format(VERSION))
-    app = make_flask_app(config, username, password, url_prefix)
-    app.config["DEPRECATED_OPTIONS"] = []
+    app = make_sanic_app(config, username, password, url_prefix)
+
     if redis_url:
         app.config["RQ_DASHBOARD_REDIS_URL"] = redis_url
     else:
         app.config["RQ_DASHBOARD_REDIS_URL"] = "redis://127.0.0.1:6379"
-    if redis_host:
-        app.config["DEPRECATED_OPTIONS"].append("--redis-host")
-    if redis_port:
-        app.config["DEPRECATED_OPTIONS"].append("--redis-port")
-    if redis_password:
-        app.config["DEPRECATED_OPTIONS"].append("--redis-password")
-    if redis_database:
-        app.config["DEPRECATED_OPTIONS"].append("--redis-database")
-    if redis_sentinels:
-        app.config["DEPRECATED_OPTIONS"].append("--redis-sentinels")
-    if redis_master_name:
-        app.config["DEPRECATED_OPTIONS"].append("--redis-master-name")
-    if web_background:
-        app.config["DEPRECATED_OPTIONS"].append("--web-background")
-    if delete_jobs is not None:
-        app.config["DEPRECATED_OPTIONS"].append("--delete-jobs")
     if poll_interval:
         app.config["RQ_DASHBOARD_POLL_INTERVAL"] = poll_interval
-    # Conditionally disable Flask console messages
-    # See: https://stackoverflow.com/questions/14888799
-    log = logging.getLogger("werkzeug")
+
+    log = sanic.log.logger
     if verbose:
         log.setLevel(logging.DEBUG)
     else:
         log.setLevel(logging.ERROR)
         log.error(" * Running on {}:{}".format(bind, port))
-
-    if app.config["DEPRECATED_OPTIONS"] and not redis_url:
-        # redis+sentinel://[:password@]host:port[,host2:port2,...][/service_name[/db]][?param1=value1[&param2=value=2&...]]
-        scheme = "redis+sentinel" if redis_sentinels else "redis"
-        if redis_sentinels:
-            netloc = redis_sentinels
-        else:
-            netloc = redis_host or "localhost"
-            if redis_port:
-                netloc = "%s:%s" % (netloc, redis_port)
-        if redis_password:
-            netloc = urlquote(redis_password) + "@" + netloc
-        path = ""
-        if redis_master_name:
-            path += "/%s" % urlquote(redis_master_name)
-        if redis_database:
-            path += "/%s" % redis_database
-        url = urlunparse((scheme, netloc, path, "", "", ""))
-        log.error(
-            "Use --redis-url=%s configuration option "
-            "instead of specifying host, port and other parameters separately",
-            url,
-        )
-        app.config["RQ_DASHBOARD_REDIS_URL"] = url
-
+    for name in app.router.routes_names:
+        log.debug(name)
     app.run(host=bind, port=port, debug=debug)
 
 

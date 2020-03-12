@@ -23,6 +23,7 @@ import arrow
 import jinja2
 import sanic
 import sanic.request
+import werkzeug
 from jinja2 import Environment, FileSystemLoader
 from redis_sentinel_url import connect as from_url
 from rq import (
@@ -44,7 +45,6 @@ from sanic import Blueprint
 from sanic.response import html as make_response, json
 from six import string_types
 
-from .legacy_config import upgrade_config
 from .version import VERSION as rq_dashboard_version
 
 CUR_DIR = os.path.abspath(os.path.join(__file__, os.path.pardir))
@@ -56,13 +56,66 @@ env = Environment(
 PREFIX = "/rq"
 
 
-def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashboard"):
+def constant_time_compare(val1, val2):
+    """
+    Returns True if the two strings are equal, False otherwise.
+
+    The time taken is independent of the number of characters that match.
+
+    For the sake of simplicity, this function executes in constant time only
+    when the two strings have the same length. It short-circuits when they
+    have different lengths.
+    """
+    if len(val1) != len(val2):
+        return False
+    result = 0
+    for x, y in zip(val1, val2):
+        result |= x ^ y
+    return result == 0
+
+
+def get_authorization(request: sanic.request.Request):
+    """The `Authorization` object in parsed form."""
+    return werkzeug.http.parse_authorization_header(request.headers.get("AUTHORIZATION"))
+
+
+def add_basic_auth(blueprint, username, password, realm="RQ Dashboard"):
+    """Add HTTP Basic Auth to a blueprint.
+
+    Note this is only for casual use!
+
+    """
+
+    @blueprint.middleware("request")
+    async def basic_http_auth(request):
+        auth = get_authorization(request)
+        if not auth \
+                or not constant_time_compare(auth.password, password) \
+                or not constant_time_compare(auth.username, username):
+            return json(
+                "Please login",
+                401,
+                headers={"WWW-Authenticate": 'Basic realm="{}"'.format(realm)},
+            )
+
+
+def setup(
+        current_app: sanic.Sanic,
+        prefix=PREFIX,
+        blueprint_namespace="rq_dashboard",
+        username=None,
+        password=None,
+
+):
     while prefix.endswith("/"):
         prefix = prefix.rstrip("/")
 
     blueprint = Blueprint(
         blueprint_namespace, prefix,
     )
+
+    if username and password:
+        add_basic_auth(blueprint, username, password)
 
     blueprint.static("/static", os.path.join(CUR_DIR, "static"))
     current_app.static("/favicon.ico", os.path.join(CUR_DIR, "static", "favicon.ico"))
@@ -76,9 +129,6 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashb
                                )
 
     def setup_rq_connection():
-        # we need to do It here instead of cli, since It may be embeded
-        upgrade_config(current_app)
-        # Getting Redis connection parameters for RQ
         redis_url = current_app.config.get("RQ_DASHBOARD_REDIS_URL")
         if isinstance(redis_url, string_types):
             current_app.config["RQ_DASHBOARD_REDIS_URL"] = (redis_url,)
@@ -237,9 +287,6 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashb
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="queues",
-                deprecation_options_usage=current_app.config.get(
-                    "DEPRECATED_OPTIONS", False
-                ),
             ),
             headers={
                 "Cache-Control": "no-store"
@@ -258,9 +305,6 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashb
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="workers",
-                deprecation_options_usage=current_app.config.get(
-                    "DEPRECATED_OPTIONS", False
-                ),
             ),
             headers={
                 "Cache-Control": "no-store"
@@ -293,9 +337,6 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashb
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="jobs",
-                deprecation_options_usage=current_app.config.get(
-                    "DEPRECATED_OPTIONS", False
-                ),
                 headers={
                     "Cache-Control": "no-store"
                 }
@@ -325,9 +366,7 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashb
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="jobs",
-                deprecation_options_usage=current_app.config.get(
-                    "DEPRECATED_OPTIONS", False
-                ),
+
                 headers={
                     "Cache-Control": "no-store"
                 }
@@ -346,9 +385,6 @@ def setup(current_app: sanic.Sanic, prefix=PREFIX, blueprint_namespace="rq_dashb
                 id=job.id,
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
-                deprecation_options_usage=current_app.config.get(
-                    "DEPRECATED_OPTIONS", False
-                ),
                 headers={
                     "Cache-Control": "no-store"
                 }
