@@ -16,6 +16,7 @@ As a quick-and-dirty convenience, the command line invocation in ``cli.py``
 provides the option to require HTTP Basic Auth in a few lines of code.
 
 """
+import os
 from math import ceil
 
 import arrow
@@ -46,20 +47,33 @@ from six import string_types
 from .legacy_config import upgrade_config
 from .version import VERSION as rq_dashboard_version
 
-env = Environment(loader=FileSystemLoader('./templates', './static'),
-                  autoescape=jinja2.select_autoescape(['html', 'xml', 'tpl']))
+CUR_DIR = os.path.abspath(os.path.join(__file__, os.path.pardir))
 
-blueprint = Blueprint(
-    "rq_dashboard", "/rq",
-)
+env = Environment(
+    loader=FileSystemLoader(searchpath=[os.path.join(CUR_DIR, 'templates'), os.path.join(CUR_DIR, 'static')]),
+    autoescape=jinja2.select_autoescape(['html', 'xml', 'tpl']))
 
-blueprint.static("static/", "./static")
+PREFIX = "/rq"
 
 
-def setup(current_app: sanic.Sanic):
+def setup(current_app: sanic.Sanic, prefix=PREFIX):
+    while prefix.endswith("/"):
+        prefix = prefix.rstrip("/")
+
+    blueprint = Blueprint(
+        "rq_dashboard", prefix,
+    )
+
+    blueprint.static("/static", os.path.join(CUR_DIR, "static"))
+    current_app.static("/favicon.ico", os.path.join(CUR_DIR, "static", "favicon.ico"))
+
     def render_template(tpl, **kwargs):
         template = env.get_template(tpl)
-        return template.render(**kwargs, poll_interval=current_app.config.get("RQ_DASHBOARD_POLL_INTERVAL", 2500))
+        return template.render(kwargs,
+                               poll_interval=current_app.config.get("RQ_DASHBOARD_POLL_INTERVAL", 2500),
+                               url_for=current_app.url_for,
+                               rq_url_prefix=prefix + "/",
+                               )
 
     def setup_rq_connection():
         # we need to do It here instead of cli, since It may be embeded
@@ -220,16 +234,17 @@ def setup(current_app: sanic.Sanic):
                 current_instance=instance_number,
                 instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
                 queues=Queue.all(),
-                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="queues",
                 deprecation_options_usage=current_app.config.get(
                     "DEPRECATED_OPTIONS", False
                 ),
-            )
+            ),
+            headers={
+                "Cache-Control": "no-store"
+            }
         )
-        r.headers.set("Cache-Control", "no-store")
         return r
 
     @blueprint.route("/<instance_number:int>/view/workers")
@@ -240,16 +255,17 @@ def setup(current_app: sanic.Sanic):
                 current_instance=instance_number,
                 instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
                 workers=Worker.all(),
-                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="workers",
                 deprecation_options_usage=current_app.config.get(
                     "DEPRECATED_OPTIONS", False
                 ),
-            )
+            ),
+            headers={
+                "Cache-Control": "no-store"
+            }
         )
-        r.headers.set("Cache-Control", "no-store")
         return r
 
     @blueprint.route(
@@ -273,16 +289,17 @@ def setup(current_app: sanic.Sanic):
                 per_page=per_page,
                 page=page,
                 registry_name=registry_name,
-                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="jobs",
                 deprecation_options_usage=current_app.config.get(
                     "DEPRECATED_OPTIONS", False
                 ),
+                headers={
+                    "Cache-Control": "no-store"
+                }
             )
         )
-        r.headers.set("Cache-Control", "no-store")
         return r
 
     @blueprint.route("/<instance_number:int>/view/job/<job_id>")
@@ -294,15 +311,16 @@ def setup(current_app: sanic.Sanic):
                 current_instance=instance_number,
                 instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
                 id=job.id,
-                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 deprecation_options_usage=current_app.config.get(
                     "DEPRECATED_OPTIONS", False
                 ),
+                headers={
+                    "Cache-Control": "no-store"
+                }
             )
         )
-        r.headers.set("Cache-Control", "no-store")
         return r
 
     @blueprint.route("/job/<job_id:int>/delete", methods=["POST"])
