@@ -98,7 +98,7 @@ def setup(current_app: sanic.Sanic):
                 name=q.name,
                 count=q.count,
                 queued_url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="queued",
@@ -107,7 +107,7 @@ def setup(current_app: sanic.Sanic):
                 ),
                 failed_job_registry_count=FailedJobRegistry(q.name).count,
                 failed_url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="failed",
@@ -116,7 +116,7 @@ def setup(current_app: sanic.Sanic):
                 ),
                 started_job_registry_count=StartedJobRegistry(q.name).count,
                 started_url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="started",
@@ -125,7 +125,7 @@ def setup(current_app: sanic.Sanic):
                 ),
                 deferred_job_registry_count=DeferredJobRegistry(q.name).count,
                 deferred_url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="deferred",
@@ -134,7 +134,7 @@ def setup(current_app: sanic.Sanic):
                 ),
                 finished_job_registry_count=FinishedJobRegistry(q.name).count,
                 finished_url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=q.name,
                     registry_name="finished",
@@ -220,7 +220,7 @@ def setup(current_app: sanic.Sanic):
                 current_instance=instance_number,
                 instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
                 queues=Queue.all(),
-                rq_url_prefix=current_app.url_for(".queues_overview"),
+                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="queues",
@@ -240,7 +240,7 @@ def setup(current_app: sanic.Sanic):
                 current_instance=instance_number,
                 instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
                 workers=Worker.all(),
-                rq_url_prefix=current_app.url_for(".queues_overview"),
+                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="workers",
@@ -273,7 +273,7 @@ def setup(current_app: sanic.Sanic):
                 per_page=per_page,
                 page=page,
                 registry_name=registry_name,
-                rq_url_prefix=current_app.url_for(".queues_overview"),
+                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 active_tab="jobs",
@@ -294,7 +294,7 @@ def setup(current_app: sanic.Sanic):
                 current_instance=instance_number,
                 instance_list=current_app.config.get("RQ_DASHBOARD_REDIS_URL"),
                 id=job.id,
-                rq_url_prefix=current_app.url_for(".queues_overview"),
+                rq_url_prefix=current_app.url_for("queues_overview"),
                 rq_dashboard_version=rq_dashboard_version,
                 rq_version=rq_version,
                 deprecation_options_usage=current_app.config.get(
@@ -375,7 +375,7 @@ def setup(current_app: sanic.Sanic):
             dict(
                 number=p,
                 url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=queue_name,
                     registry_name=registry_name,
@@ -391,7 +391,7 @@ def setup(current_app: sanic.Sanic):
         if current_page > 1:
             prev_page = dict(
                 url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=queue_name,
                     registry_name=registry_name,
@@ -404,7 +404,7 @@ def setup(current_app: sanic.Sanic):
         if current_page < last_page:
             next_page = dict(
                 url=current_app.url_for(
-                    ".jobs_overview",
+                    "jobs_overview",
                     instance_number=instance_number,
                     queue_name=queue_name,
                     registry_name=registry_name,
@@ -415,7 +415,7 @@ def setup(current_app: sanic.Sanic):
 
         first_page_link = dict(
             url=current_app.url_for(
-                ".jobs_overview",
+                "jobs_overview",
                 instance_number=instance_number,
                 queue_name=queue_name,
                 registry_name=registry_name,
@@ -425,7 +425,7 @@ def setup(current_app: sanic.Sanic):
         )
         last_page_link = dict(
             url=current_app.url_for(
-                ".jobs_overview",
+                "jobs_overview",
                 instance_number=instance_number,
                 queue_name=queue_name,
                 registry_name=registry_name,
