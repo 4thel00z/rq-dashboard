@@ -39,7 +39,7 @@ Installing from PyPI
 --------------------
 
 ``` {.console}
-$ pip install rq-dashboard
+$ pipenv install git+https://github.com/4thel00z/rq-dashboard#egg=rq-dashboard
 ```
 
 Running the dashboard
@@ -48,6 +48,9 @@ Running the dashboard
 Run the dashboard standalone, like this:
 
 ``` {.console}
+#eventually
+$ pipenv shell
+
 $ rq-dashboard
 * Running on http://127.0.0.1:9181/
 ...
