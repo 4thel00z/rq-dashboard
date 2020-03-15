@@ -19,6 +19,7 @@ The RQ dashboard is currently being developed and is in beta stage.
 Installing with Docker
 ----------------------
 
+**Currently the Docker installation is broken !! To be fixed soon!!**
 You can also run the dashboard inside of docker:
 
 ``` {.console}
