@@ -2,7 +2,7 @@ Introduction
 ============
 
 `rq-dashboard` is a general purpose, lightweight,
-[Flask](https://flask.palletsprojects.com/)-based web front-end to monitor your
+[Sanic](https://github.com/huge-success/sanic)-based web front-end to monitor your
 [RQ](http://python-rq.org/) queues, jobs, and workers in realtime.
 
 [![Build
@@ -63,7 +63,7 @@ Usage: rq-dashboard [OPTIONS]
   variables of the form RQ_DASHBOARD_*. For example RQ_DASHBOARD_USERNAME.
 
   A subset of the configuration (the configuration parameters used by the
-  underlying flask blueprint) can also be provided in a Python module
+  underlying sanic blueprint) can also be provided in a Python module
   referenced using --config, or with a .cfg file referenced by the
   RQ_DASHBOARD_SETTINGS environment variable.
 
@@ -93,33 +93,29 @@ Integrating the dashboard in your Flask app
 The dashboard can be integrated in to your own [Flask](http://flask.pocoo.org/) app by accessing the blueprint directly in the normal way, e.g.:
 
 ``` {.python}
-from flask import Flask
+from sanic import Sanic 
 import rq_dashboard
 
-app = Flask(__name__)
-app.config.from_object(rq_dashboard.default_settings)
-app.register_blueprint(rq_dashboard.blueprint, url_prefix="/rq")
+app = Sanic(__name__)
+prefix = "/rq"
+blueprint_namespace="rq_dashboard"
+username="some_username"
+password="some_password"
+
+bp = rq_dashboard.setup(app, prefix, blueprint_namespace, username, password)
+app.blueprint(bp)
 
 @app.route("/")
-def hello():
+async def hello():
     return "Hello World!"
 
 if __name__ == "__main__":
     app.run()
 ```
 
-If you start the Flask app on the default port, you can access the
+If you start the Sanic app on the default port, you can access the
 dashboard at <http://localhost:5000/rq>. The `cli.py:main` entry point
 provides a simple working example.
-
-Running on Heroku
------------------
-
-Consider using third-party project
-[rq-dashboard-on-heroku](https://github.com/metabolize/rq-dashboard-on-heroku),
-which installs rq-dashboard from PyPI and wraps in in
-[Gunicorn](https://gunicorn.org) for deployment to Heroku.
-rq-dashboard-on-heroku is maintained indepdently.
 
 Developing
 ----------
@@ -127,7 +123,7 @@ Developing
 Develop in a virtualenv and make sure you have all the necessary build
 time (and run time) dependencies with
 
-    $ pip install -r requirements.txt
+    $ pipenv install
 
 Develop in the normal way with
 
